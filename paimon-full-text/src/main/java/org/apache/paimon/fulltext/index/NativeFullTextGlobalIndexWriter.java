@@ -106,6 +106,13 @@ public class NativeFullTextGlobalIndexWriter implements GlobalIndexSingleColumnW
     private ResultEntry writeIndex() throws IOException {
         String fileName = fileWriter.newFileName(FILE_NAME_PREFIX);
         try (PositionOutputStream out = fileWriter.newOutputStream(fileName)) {
+            // The native writer streams the archive through this callback in bounded chunks.
+            // Bytes must be written through immediately and the buffer must never be retained:
+            // newer paimon-full-text-index versions reuse one buffer across calls to keep Java
+            // heap usage bounded. Note that paimon-full-text-index <= 0.2.0 allocates a new
+            // byte[] per chunk that stays pinned as a JNI local reference until writeIndex
+            // returns, so the whole archive is held on the Java heap and large shards can OOM.
+            // Upgrade the dependency or lower 'global-index.row-count-per-shard' to mitigate.
             writer.writeIndex(
                     new FullTextIndexOutput() {
                         @Override
